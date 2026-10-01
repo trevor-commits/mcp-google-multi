@@ -4,12 +4,14 @@ This document inventories failure modes and mitigations for **local** operation 
 
 ## Open draft PR survey
 
-Survey date: **2026-10-01**. Goal: one canonical reliability/docs draft — extend in place, no merge without maintainer review, **no live Google writes** during validation.
+Survey date: **2026-10-01** (last deeper pass: same day, usage-burn draft-only). Goal: one canonical reliability/docs draft — extend in place, no merge without maintainer review, **no live Google writes** during validation.
 
 | PR | Branch | State | Scope | Action |
 |----|--------|-------|-------|--------|
 | [#1](https://github.com/trevor-commits/mcp-google-multi/pull/1) | `cursor/harden-boundaries-da19` | **DRAFT** | Token-store locking, env boundaries, escape-hatch toolsets, `migrate-tokens` resilience, this survey + offline verify | **Canonical** — all deeper reliability/docs work lands here |
 | — | — | — | No other open drafts | Do not open a second parallel reliability PR |
+
+**Survey method (repeatable):** `gh pr list --draft --state open` on `trevor-commits/mcp-google-multi`. As of the last pass, only **#1** matched; extend it rather than opening a sibling draft.
 
 ## Verification quick path
 
@@ -31,6 +33,26 @@ npm run verify
 **Expected success (full verify):** exit code `0` after typecheck, eslint, tests, and `tsc` build with no errors.
 
 CI runs on **Node 24** via `.github/workflows/test.yml` (`npm ci` then `npm run verify`). Local Node 20–23 is supported; use Node 24 when reproducing CI-only quirks.
+
+### Verify transcript (what “green” looks like)
+
+After `npm run test`, the last lines should match:
+
+```text
+Test Files  19 passed (19)
+     Tests  273 passed (273)
+```
+
+After `npm run build`, `dist/index.js` exists and is executable (`chmod +x` in the build script).
+
+Full `npm run verify` prints four stages in order with no non-zero exit:
+
+1. `tsc --noEmit` (silent on success)
+2. `eslint .` (silent on success)
+3. Vitest summary above
+4. `tsc` emit + `chmod +x dist/index.js`
+
+**Do not** run `node dist/index.js auth`, handler smoke against real accounts, or `google_api_call` as part of this offline gate unless a maintainer explicitly asks for live validation.
 
 ### Optional local smoke (still offline for Google)
 
@@ -98,6 +120,74 @@ Run `npm run test` (or `npm run verify`) — **19** files, **273** tests as of t
 | `trim.test.ts` | Compaction and character caps |
 | `write-control.test.ts` | Profiles, globs, deny-by-default |
 
+## Write-control precedence (CUD tools)
+
+Policy is resolved once at boot (`resolvePolicy()`). For each **non-read** tool, the registry wrapper calls `isAllowed({ name, service, cud }, policy)` before the handler runs. Order of evaluation (`src/write-control.ts`):
+
+| Step | Condition | Verdict |
+|------|-----------|---------|
+| 1 | `cud === 'read'` | **Allow** (reads are never gated) |
+| 2 | `GOOGLE_READ_ONLY` truthy | **Deny** |
+| 3 | `GOOGLE_WRITE_DENY` glob matches `service:cud` or `service:operation` | **Deny** |
+| 4 | `GOOGLE_WRITE_ALLOW` glob matches | **Allow** |
+| 5 | Profile default | `read-only` → deny all CUD; `safe-writes` → allow create/update only; `full-writes` → allow all CUD |
+
+Glob patterns use `*` segments (e.g. `gmail:send`, `drive:*`). Invalid `GOOGLE_PROFILE` values fall back to **`read-only`**.
+
+**Sanctioned self-checks** (registry cud is `read` but side effects exist):
+
+- `google_api_call` — derives CUD from Discovery HTTP verb per call.
+- `drive_transfer` with `move: true` — delete-classified side effect checked against policy.
+
+## CUD classification (`inferCud`)
+
+Tool names drive write-control unless listed in `CUD_OVERRIDES` (`src/registry.ts`):
+
+| Override | Effective `cud` | Why |
+|----------|-----------------|-----|
+| `drive_untrash` | `update` | Restore, not create |
+| `drive_transfer` | `create` | Copy/create path; `move` self-checks delete |
+
+Otherwise: delete/remove/trash verbs → `delete`; create/send/upload/… → `create`; update/patch/move/… → `update`; default → `read`.
+
+Misclassified verbs are fixed in `CUD_OVERRIDES` or the regex buckets — do not add per-handler write gates in service files.
+
+## Discover-first visibility
+
+All tools **register eagerly** (always dispatchable). `tools/list` is customized in `installListHandler()`:
+
+```text
+Initially visible: meta tools only (account_list, {service}_discover, google_api_*, …)
+Hidden until reveal: curated per-service tools for that service namespace
+Reveal trigger:     {service}_discover handler → registry.reveal(service) → tools/list_changed
+```
+
+Clients that never call `{service}_discover` still **can** invoke a tool by name if they know it (graceful dispatch). `config check` prints eager / revealed / hidden counts for sanity checks.
+
+## Fan-out reads (multi-account)
+
+Read tools with a plain `account` enum may accept `"*"`, a single alias, or a CSV of aliases (`fanoutAccountField`). Rules (`src/fanout.ts`, wired in `registry.ts`):
+
+- **Concurrency:** at most **5** accounts in parallel (`FANOUT_CONCURRENCY`).
+- **Envelope:** `{ results: FanoutEntry[], partial?: true }` when any account fails; payloads are parsed objects, not embedded JSON strings.
+- **Never fan-out:** meta tools; any CUD tool; `FANOUT_EXCLUDE` (`gmail_download_attachment`, `drive_download`, `drive_export`) — local paths would clobber across accounts.
+- **Invalid CSV alias:** validation error listing valid aliases (no API call).
+
+## Server boot ordering (`buildRegistry`)
+
+Fail-fast sequence in `src/index.ts`:
+
+```text
+1. Parse GOOGLE_ACCOUNTS (throws on bad config — import side effect)
+2. resolvePolicy()
+3. Filter SERVICES by GOOGLE_TOOLSETS + optional scope/admin gates (stderr hints)
+4. If registry.services() is empty → throw BEFORE discover/escape/meta register
+5. registerDiscoverTools + registerEscapeTools + registerAccountTools
+6. installListHandler() then connect stdio transport
+```
+
+An empty curated toolset must **not** still expose escape meta tools — the empty-services throw runs before escape registration.
+
 ## Token store concurrency (mental model)
 
 ```text
@@ -144,6 +234,9 @@ Multiple MCP host processes refreshing the **same** alias contend on `{alias}.en
 | Vitest count drift vs this doc | New tests landed on `dev` | Re-run `npm run test`; update inventory table + PR body counts |
 | `config check` throws on boot | `GOOGLE_ACCOUNTS` / `GOOGLE_TOOLSETS` invalid at import | Fix env before CLI; unit tests avoid real `.env` via `tests/setup.ts` |
 | Escape hatch 403/404 with good creds | Toolset filtered API id | Ensure API alias maps via `SERVICE_FOR_ALIAS` in `google-api.ts` |
+| Fan-out returns `partial: true` | One or more accounts failed | Inspect per-entry `error` in `results`; fix token or alias for failing account |
+| Tool works but never appears in list | Discover-first hiding | Call `{service}_discover` once, or use `config check` hidden count |
+| `write_disabled` on expected write | Profile or glob | See write-control precedence table; `config check` shows profile + enabled CUD tools |
 
 ## Change checklist (reliability/docs passes)
 

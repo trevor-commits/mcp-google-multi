@@ -43,7 +43,7 @@ All of these must pass (single command mirrors CI):
 npm run verify
 ```
 
-Equivalent to `npm run typecheck && npm run lint && npm run test && npm run build`. See also [docs/RELIABILITY-SURVEY.md](./docs/RELIABILITY-SURVEY.md) for what offline tests cover.
+Equivalent to `npm run typecheck && npm run lint && npm run test && npm run build`. See [docs/RELIABILITY-SURVEY.md](./docs/RELIABILITY-SURVEY.md) for the offline gate (expected Vitest counts, verify transcript), draft-PR survey, and troubleshooting without live Google calls.
 
 CI does not load a `.env` or touch Google OAuth. Vitest injects a fixture account (`test:test@example.com` — see `tests/setup.ts` and [AGENTS.md](./AGENTS.md)). Handler smoke tests against real accounts are manual; unit tests mock boundaries (token store, Discovery, registry dispatch).
 
