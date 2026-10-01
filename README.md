@@ -69,7 +69,7 @@ Now the only thing on disk is the **encrypted** token store. Pass the token via 
 | `GOOGLE_WRITE_ALLOW` / `GOOGLE_WRITE_DENY` | — | glob overrides, e.g. `calendar:*`, `*:delete*` |
 | `GOOGLE_OPTIONAL_SCOPES` | — | extra bundles: `forms`, `chat` |
 | `GOOGLE_ADMIN_ACCOUNTS` | — | aliases granted Workspace-admin scopes (the account's own super-admin OAuth) |
-| `GOOGLE_TOOLSETS` | — | `all` (default) or a CSV filter of: `gmail`, `drive`, `calendar`, `sheets`, `docs`, `contacts`, `searchconsole`, `tasks`, `meet`, `forms`, `chat`, `admin` |
+| `GOOGLE_TOOLSETS` | — | `all` (default) or a CSV filter of: `gmail`, `drive`, `calendar`, `sheets`, `docs`, `contacts`, `searchconsole`, `tasks`, `meet`, `forms`, `chat`, `admin`, plus escape-hatch-only names `slides`, `driveactivity`, `drivelabels`, `groupssettings` |
 | `TOKEN_STORE_PATH` | — | override the encrypted token dir (default: `~/.config/mcp-google-multi/tokens`) |
 | `DISCOVERY_CACHE_PATH` | — | override the Discovery-doc cache dir (default: `~/.config/mcp-google-multi/discovery`) |
 | `GOOGLE_TRIM` | — | `off` (or `0`/`false`/`no`) disables compact JSON serialization of tool responses |
@@ -100,7 +100,7 @@ Fan-out is **read-only by design** (write tools take exactly one account), and t
 
 ## Escape hatch: any Workspace REST method
 
-Two eager tools cover everything the curated set doesn't: `google_api_search` finds any method in Google's API Discovery index (including APIs with no dedicated tools here, like Slides), and `google_api_call` invokes a method by its Discovery id (`drive.revisions.list`, `slides.presentations.create`, …) with path/query params and a JSON body. Calls run through your account's OAuth client and the **same write-control policy** as named tools: the read/create/update/delete class is derived from the method's HTTP verb and name (POST deletes like `batchDelete`/`clear` count as deletes), and policy globs/`GOOGLE_TOOLSETS` match the same service names as named tools (`people` counts as `contacts`, `admin_*` as `admin`; `slides`/`driveactivity`/`drivelabels`/`groupssettings` have no named service and are always available).
+Two eager tools cover everything the curated set doesn't: `google_api_search` finds any method in Google's API Discovery index (including APIs with no dedicated tools here, like Slides), and `google_api_call` invokes a method by its Discovery id (`drive.revisions.list`, `slides.presentations.create`, …) with path/query params and a JSON body. Calls run through your account's OAuth client and the **same write-control policy** as named tools: the read/create/update/delete class is derived from the method's HTTP verb and name (POST deletes like `batchDelete`/`clear` count as deletes), and policy globs/`GOOGLE_TOOLSETS` match the same service names as named tools (`people` counts as `contacts`, `admin_*` as `admin`; APIs without curated tools use their Discovery alias as the toolset name — e.g. `slides`, `driveactivity`, `drivelabels`, `groupssettings` — and are excluded when that name is not in your `GOOGLE_TOOLSETS` filter).
 
 Discovery documents are fetched from Google on first use and cached on disk for 7 days (`DISCOVERY_CACHE_PATH`, default `~/.config/mcp-google-multi/discovery`); a stale cache is used when offline.
 
@@ -156,6 +156,8 @@ Maintainer-led. Direction is tracked publicly as **[GitHub Milestones](https://g
 ## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) and the [Code of Conduct](./CODE_OF_CONDUCT.md). Security issues go to [SECURITY.md](./SECURITY.md), never a public issue.
+
+Offline CI parity: `npm run verify` (typecheck, lint, test, build). Agent-oriented map: [AGENTS.md](./AGENTS.md). Reliability boundaries and troubleshooting: [docs/RELIABILITY-SURVEY.md](./docs/RELIABILITY-SURVEY.md).
 
 ## Credits
 
