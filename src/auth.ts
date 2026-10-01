@@ -48,22 +48,48 @@ export const ADMIN_SCOPES = [
   'https://www.googleapis.com/auth/admin.directory.group.member.readonly',
 ];
 
-/** Parse comma-separated env value into a deduplicated string array. */
-function parseCsvEnv(name: string): string[] {
-  return (process.env[name]?.trim() ?? '')
+/** Parse comma-separated env value into a string array (no dedupe). */
+function parseCsvEnvFrom(env: NodeJS.ProcessEnv, name: string): string[] {
+  return (env[name]?.trim() ?? '')
     .split(',')
-    .map(s => s.trim())
+    .map((s) => s.trim())
     .filter(Boolean);
 }
 
 /** Bundle keys enabled via GOOGLE_OPTIONAL_SCOPES (e.g. ["forms","chat"]). */
-export function getOptionalBundles(): string[] {
-  return parseCsvEnv('GOOGLE_OPTIONAL_SCOPES').filter(b => b in OPTIONAL_SCOPE_BUNDLES);
+export function getOptionalBundles(env: NodeJS.ProcessEnv = process.env): string[] {
+  const seen = new Set<string>();
+  const bundles: string[] = [];
+  for (const key of parseCsvEnvFrom(env, 'GOOGLE_OPTIONAL_SCOPES')) {
+    if (!(key in OPTIONAL_SCOPE_BUNDLES)) {
+      process.stderr.write(
+        `GOOGLE_OPTIONAL_SCOPES: unknown bundle "${key}" ignored (known: ${Object.keys(OPTIONAL_SCOPE_BUNDLES).join(', ')})\n`,
+      );
+      continue;
+    }
+    if (!seen.has(key)) {
+      seen.add(key);
+      bundles.push(key);
+    }
+  }
+  return bundles;
 }
 
 /** Account aliases granted ADMIN_SCOPES via GOOGLE_ADMIN_ACCOUNTS. */
-export function getAdminAccounts(): string[] {
-  return parseCsvEnv('GOOGLE_ADMIN_ACCOUNTS');
+export function getAdminAccounts(env: NodeJS.ProcessEnv = process.env): string[] {
+  const seen = new Set<string>();
+  const valid: string[] = [];
+  for (const alias of parseCsvEnvFrom(env, 'GOOGLE_ADMIN_ACCOUNTS')) {
+    if (!ACCOUNTS.includes(alias)) {
+      process.stderr.write(`GOOGLE_ADMIN_ACCOUNTS: unknown alias "${alias}" ignored (valid: ${ACCOUNTS.join(', ')})\n`);
+      continue;
+    }
+    if (!seen.has(alias)) {
+      seen.add(alias);
+      valid.push(alias);
+    }
+  }
+  return valid;
 }
 
 /**

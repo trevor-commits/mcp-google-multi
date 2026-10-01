@@ -46,6 +46,8 @@ npm run test
 npm run build
 ```
 
+CI does not load a `.env` or touch Google OAuth. Vitest injects a fixture account (`test:test@example.com` — see `tests/setup.ts` and [AGENTS.md](./AGENTS.md)). Handler smoke tests against real accounts are manual; unit tests mock boundaries (token store, Discovery, registry dispatch).
+
 ## Conventions
 
 The full spec lives in [`CLAUDE.md`](./CLAUDE.md). The essentials:

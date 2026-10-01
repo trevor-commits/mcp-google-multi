@@ -24,12 +24,14 @@ export interface AccountConfig {
 }
 
 /**
- * Parse accounts from the GOOGLE_ACCOUNTS env var.
+ * Parse accounts from a GOOGLE_ACCOUNTS string.
  * Format: "alias1:email1,alias2:email2,..."
  * Example: "work:me@company.com,personal:me@gmail.com"
  */
-function parseAccounts(): { aliases: [string, ...string[]]; configs: Record<string, AccountConfig> } {
-  const raw = process.env.GOOGLE_ACCOUNTS;
+export function parseGoogleAccounts(
+  raw: string,
+  resolvedTokenDir: string,
+): { aliases: [string, ...string[]]; configs: Record<string, AccountConfig> } {
   if (!raw || raw.trim() === '') {
     throw new Error(
       'GOOGLE_ACCOUNTS is not set. Define it in .env like:\n' +
@@ -77,8 +79,8 @@ function parseAccounts(): { aliases: [string, ...string[]]; configs: Record<stri
     aliases.push(alias);
     configs[alias] = {
       email,
-      tokenPath: path.join(tokenDir, alias, 'token.json'),
-      encPath: path.join(tokenDir, `${alias}.enc`),
+      tokenPath: path.join(resolvedTokenDir, alias, 'token.json'),
+      encPath: path.join(resolvedTokenDir, `${alias}.enc`),
     };
   }
 
@@ -89,7 +91,7 @@ function parseAccounts(): { aliases: [string, ...string[]]; configs: Record<stri
   return { aliases: aliases as [string, ...string[]], configs };
 }
 
-const parsed = parseAccounts();
+const parsed = parseGoogleAccounts(process.env.GOOGLE_ACCOUNTS ?? '', tokenDir);
 
 /** Tuple of account aliases (at least one) — usable with z.enum() */
 export const ACCOUNTS = parsed.aliases;
