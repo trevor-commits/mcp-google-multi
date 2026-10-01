@@ -47,4 +47,22 @@ describe('runMigrateTokens', () => {
     expect(readToken('test')).toEqual(sample);
     expect(log.mock.calls.some((c) => String(c[0]).includes('1 migrated'))).toBe(true);
   });
+
+  it('skips JSON arrays without writing encrypted tokens', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'migrate-tokens-'));
+    cleanupDirs.push(dir);
+    const plainDir = path.join(dir, 'test');
+    fs.mkdirSync(plainDir, { recursive: true });
+    ACCOUNT_CONFIG.test.tokenPath = path.join(plainDir, 'token.json');
+    ACCOUNT_CONFIG.test.encPath = path.join(dir, 'test.enc');
+    process.env.MASTER_KEY = KEY;
+
+    fs.writeFileSync(ACCOUNT_CONFIG.test.tokenPath, '[]');
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    runMigrateTokens();
+
+    expect(hasToken('test')).toBe(false);
+    expect(stderr.mock.calls.some((c) => String(c[0]).includes('expected a JSON object'))).toBe(true);
+  });
 });

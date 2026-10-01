@@ -51,7 +51,24 @@ Prints write-control profile, enabled CUD tools, registered services, and discov
 
 ### Reliability survey
 
-See **[docs/RELIABILITY-SURVEY.md](./docs/RELIABILITY-SURVEY.md)** for a subsystem-by-subsystem matrix (risks, mitigations, which test file covers each boundary). Use it when scoping a reliability or docs-only pass.
+See **[docs/RELIABILITY-SURVEY.md](./docs/RELIABILITY-SURVEY.md)** for:
+
+- Subsystem matrix (risks, mitigations, test mapping)
+- Full **test file inventory** (19 Vitest files)
+- Token-lock concurrency notes and **offline troubleshooting**
+
+Use it when scoping a reliability or docs-only pass.
+
+### When `npm run verify` fails
+
+| Stage | Typical fix |
+|-------|-------------|
+| `typecheck` | Fix TS errors; run `npm run build` locally to see emit issues |
+| `lint` | `npm run lint` — eslint on `src/` and `tests/` |
+| `test` | `npm run test` — one failing file at a time; tests need no `.env` |
+| `build` | `tsc` errors or missing `chmod` on `dist/index.js` |
+
+CI uses **Node 24**; local **Node 20+** matches `package.json` `engines`.
 
 ## Expected accounts and labels
 

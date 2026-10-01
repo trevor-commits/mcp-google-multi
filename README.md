@@ -157,6 +157,8 @@ Maintainer-led. Direction is tracked publicly as **[GitHub Milestones](https://g
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) and the [Code of Conduct](./CODE_OF_CONDUCT.md). Security issues go to [SECURITY.md](./SECURITY.md), never a public issue.
 
+Offline CI parity: `npm run verify` (typecheck, lint, test, build). Agent-oriented map: [AGENTS.md](./AGENTS.md). Reliability boundaries and troubleshooting: [docs/RELIABILITY-SURVEY.md](./docs/RELIABILITY-SURVEY.md).
+
 ## Credits
 
 Built and maintained by **Abdelbaki Berkati** — [berkati.xyz](https://berkati.xyz) · [@bakissation](https://github.com/bakissation). [Read the case study →](https://berkati.xyz/case-studies/mcp-google-multi/)
