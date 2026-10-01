@@ -101,6 +101,15 @@ describe('token-store crypto', () => {
     expect(readToken('test')).toEqual(sample);
   });
 
+  it('throws on decrypt failure so callers can surface decrypt_error', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'token-store-'));
+    cleanupDirs.push(dir);
+    ACCOUNT_CONFIG.test.encPath = path.join(dir, 'test.enc');
+    process.env.MASTER_KEY = KEY;
+    fs.writeFileSync(ACCOUNT_CONFIG.test.encPath, 'not-valid-json', { mode: 0o600 });
+    expect(() => readToken('test')).toThrow();
+  });
+
   it('merges refresh updates with the latest token inside the store boundary', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'token-store-'));
     cleanupDirs.push(dir);

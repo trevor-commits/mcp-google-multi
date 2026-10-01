@@ -23,19 +23,35 @@ This file maps the repo for automated contributors and cloud agents. Human-orien
 From the repo root after `npm install`:
 
 ```bash
+npm run verify
+```
+
+That runs `typecheck` → `lint` → `test` → `build` in order (offline; no Google network). CI uses the same entry point on **Node 24** (`.github/workflows/test.yml`).
+
+To run steps individually:
+
+```bash
 npm run typecheck
 npm run lint
 npm run test
 npm run build
 ```
 
-CI runs the same steps on Node 24 (see `.github/workflows/test.yml`). Tests mock Discovery deps, token I/O, and registry handlers where needed; they do **not** call `googleapis` against real accounts.
+Tests mock Discovery deps, token I/O, and registry handlers where needed; they do **not** call `googleapis` against real accounts.
 
-Optional smoke test (requires your `.env`, `MASTER_KEY`, and `mcp-google-multi auth` per alias):
+### Optional smoke (no API writes)
+
+After `npm run build`, with your `.env` and encrypted tokens already in place:
 
 ```bash
 node dist/index.js config check
 ```
+
+Prints write-control profile, enabled CUD tools, registered services, and discover/escape tool counts. Does not open MCP stdio or call Google APIs.
+
+### Reliability survey
+
+See **[docs/RELIABILITY-SURVEY.md](./docs/RELIABILITY-SURVEY.md)** for a subsystem-by-subsystem matrix (risks, mitigations, which test file covers each boundary). Use it when scoping a reliability or docs-only pass.
 
 ## Expected accounts and labels
 

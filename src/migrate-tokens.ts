@@ -13,7 +13,20 @@ export function runMigrateTokens(): void {
       skipped++;
       continue;
     }
-    writeToken(alias, JSON.parse(fs.readFileSync(plain, 'utf8')));
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(fs.readFileSync(plain, 'utf8'));
+    } catch (err) {
+      process.stderr.write(
+        `✗ ${alias}: could not parse ${plain} — ${(err as Error).message}; skipping\n`,
+      );
+      continue;
+    }
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      process.stderr.write(`✗ ${alias}: expected a JSON object in ${plain}; skipping\n`);
+      continue;
+    }
+    writeToken(alias, parsed as object);
     console.log(`✓ ${alias}: migrated ${plain} → encrypted store`);
     migrated++;
   }
