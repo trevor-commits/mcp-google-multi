@@ -2,15 +2,45 @@
 
 This document inventories failure modes and mitigations for **local** operation (encrypted tokens, env boundaries, MCP stdio). It is aimed at contributors and cloud agents validating changes **without** OAuth or Google API calls.
 
+## Open draft PR survey
+
+Survey date: **2026-10-01**. Goal: one canonical reliability/docs draft — extend in place, no merge without maintainer review, **no live Google writes** during validation.
+
+| PR | Branch | State | Scope | Action |
+|----|--------|-------|-------|--------|
+| [#1](https://github.com/trevor-commits/mcp-google-multi/pull/1) | `cursor/harden-boundaries-da19` | **DRAFT** | Token-store locking, env boundaries, escape-hatch toolsets, `migrate-tokens` resilience, this survey + offline verify | **Canonical** — all deeper reliability/docs work lands here |
+| — | — | — | No other open drafts | Do not open a second parallel reliability PR |
+
 ## Verification quick path
 
-| Step | Command | Needs secrets? |
-|------|---------|----------------|
-| Full offline gate (matches CI intent) | `npm run verify` | No |
-| Same steps individually | `npm run typecheck`, `npm run lint`, `npm run test`, `npm run build` | No |
-| Resolved policy + tool surface | `node dist/index.js config check` | Yes (`.env` + `MASTER_KEY`; no API traffic) |
+**Prerequisites:** Node **20+** (`package.json` `engines`); clean tree after `git clone` / checkout.
 
-CI runs on **Node 24** via `.github/workflows/test.yml` (`npm ci` then `npm run verify`).
+```bash
+npm ci
+npm run verify
+```
+
+| Step | Command | Needs secrets? | Touches Google APIs? |
+|------|---------|----------------|----------------------|
+| Full offline gate (matches CI) | `npm run verify` | No | No |
+| Same steps individually | `npm run typecheck`, `npm run lint`, `npm run test`, `npm run build` | No | No |
+| Resolved policy + tool surface | `node dist/index.js config check` | Yes (`.env` + `MASTER_KEY` for decrypt paths only) | No |
+
+**Expected success (test stage):** Vitest ends with `Test Files  19 passed (19)` and `Tests  273 passed (273)`. Build emits `dist/index.js` (executable).
+
+**Expected success (full verify):** exit code `0` after typecheck, eslint, tests, and `tsc` build with no errors.
+
+CI runs on **Node 24** via `.github/workflows/test.yml` (`npm ci` then `npm run verify`). Local Node 20–23 is supported; use Node 24 when reproducing CI-only quirks.
+
+### Optional local smoke (still offline for Google)
+
+After `npm run build`, with developer `.env` already configured (same as daily MCP use):
+
+```bash
+node dist/index.js config check
+```
+
+Prints write-control profile, registered services, and discover/escape tool counts. Does **not** start MCP stdio, refresh OAuth tokens, or call `googleapis`.
 
 ## Subsystem matrix
 
@@ -36,6 +66,11 @@ CI runs on **Node 24** via `.github/workflows/test.yml` (`npm ci` then `npm run 
 | **Drive transfer** (`drive_transfer`) | Delete when profile denies | `move` path checks `isAllowed` for delete-classified side effect | `tests/drive-transfer.test.ts` |
 | **Sheets/Docs masks** (`drive.ts` helpers) | Wildcard `fields` over-fetch or break batchUpdate | Masks computed from input keys only | `tests/field-mask-helpers.test.ts` |
 | **Gmail MIME** (`src/tools/gmail.ts`) | Malformed MIME crashes handler | Defensive parse boundaries | `tests/gmail-mime.test.ts` |
+| **Server boot** (`src/index.ts`) | Empty tool surface; meta tools masking misconfig | `buildRegistry()` throws if `registry.services()` is empty **before** discover/escape register; stderr hints for disabled `forms`/`chat`/`admin` | Indirect via `tests/toolsets.test.ts`, integration in registry tests |
+| **CUD classification** (`src/registry.ts`) | Mis-gated writes or false denials | Verb-regex `inferCud` + `CUD_OVERRIDES` (`drive_untrash`, `drive_transfer`); registry wraps every CUD handler with `isAllowed` | `tests/registry.test.ts` (inference + `drive_transfer` move gate) |
+| **MCP stdio** (handlers) | Broken MCP channel; log leakage | No `console.log` in tool paths; JSON text content blocks only; errors via `_errors.ts` shims | Convention + `tests/errors.test.ts` |
+| **Discovery cache dir** (`DISCOVERY_CACHE_PATH`) | Stale/corrupt REST discovery JSON | 7-day disk cache, stale-if-offline; escape call tool rejects non-Google hosts | `tests/discovery-client.test.ts` |
+| **Response compaction** (`GOOGLE_TRIM`) | Accidental huge payloads when trim disabled | Default on; `GOOGLE_TRIM=off` skips `compactResult` only (per-tool caps still apply) | `tests/trim.test.ts` |
 
 ## Test file inventory (offline)
 
@@ -82,6 +117,11 @@ Multiple MCP host processes refreshing the **same** alias contend on `{alias}.en
 | `GOOGLE_ADMIN_ACCOUNTS` | Unknown aliases **ignored** (stderr lists configured aliases) |
 | `GOOGLE_TOOLSETS` | Unknown curated service names **ignored** (stderr); escape-only names (`slides`, …) enforced in `google_api_*` |
 | `MASTER_KEY` | **Throws** on encrypt/decrypt when empty; wrong key fails GCM auth |
+| `TOKEN_STORE_PATH` | Override token dir; aliases still constrained by charset (no `..` in alias) |
+| `DISCOVERY_CACHE_PATH` | Override discovery cache root; corrupt file → delete cache dir and retry (see escape-hatch hint) |
+| `GOOGLE_TRIM` | `off` / `0` / `false` / `no` disables JSON compaction on registry output |
+| `GOOGLE_READ_ONLY` | `true` hard-blocks all CUD regardless of profile |
+| `GOOGLE_WRITE_ALLOW` / `GOOGLE_WRITE_DENY` | Glob overrides on tool names; evaluated after profile |
 
 ## What CI deliberately does *not* cover
 
@@ -100,6 +140,17 @@ Multiple MCP host processes refreshing the **same** alias contend on `{alias}.en
 | Admin tools 403 on personal Gmail | Expected | `GOOGLE_ADMIN_ACCOUNTS` only for Workspace accounts with admin consent |
 | `migrate-tokens` skips an alias | Bad plaintext JSON or non-object | stderr per alias; fix `tokens/<alias>/token.json` or re-auth |
 | Writes blocked with policy message | Deny-by-default profile | `GOOGLE_PROFILE`, `GOOGLE_WRITE_ALLOW` / `DENY` — run `config check` |
+| `verify` fails on `lint` only locally | Editor/ESLint version skew | Match CI: Node 24 + `npm ci` (lockfile-pinned eslint) |
+| Vitest count drift vs this doc | New tests landed on `dev` | Re-run `npm run test`; update inventory table + PR body counts |
+| `config check` throws on boot | `GOOGLE_ACCOUNTS` / `GOOGLE_TOOLSETS` invalid at import | Fix env before CLI; unit tests avoid real `.env` via `tests/setup.ts` |
+| Escape hatch 403/404 with good creds | Toolset filtered API id | Ensure API alias maps via `SERVICE_FOR_ALIAS` in `google-api.ts` |
+
+## Change checklist (reliability/docs passes)
+
+1. Survey open **draft** PRs; extend the canonical draft (#1) instead of opening duplicates.
+2. Run `npm ci && npm run verify` — no OAuth, no handler smoke against live accounts unless explicitly requested.
+3. Update this file if subsystems, env boundaries, or test inventory changed.
+4. Update [AGENTS.md](../AGENTS.md) verify section if the gate command or expected counts changed.
 
 ## Related docs
 

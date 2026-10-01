@@ -20,13 +20,16 @@ This file maps the repo for automated contributors and cloud agents. Human-orien
 
 ## Local verification (no OAuth required)
 
-From the repo root after `npm install`:
+From the repo root (prefer lockfile install for CI parity):
 
 ```bash
+npm ci
 npm run verify
 ```
 
 That runs `typecheck` → `lint` → `test` → `build` in order (offline; no Google network). CI uses the same entry point on **Node 24** (`.github/workflows/test.yml`).
+
+On success, Vitest reports **19** files and **273** tests passed; `dist/index.js` is emitted and executable.
 
 To run steps individually:
 
@@ -53,9 +56,11 @@ Prints write-control profile, enabled CUD tools, registered services, and discov
 
 See **[docs/RELIABILITY-SURVEY.md](./docs/RELIABILITY-SURVEY.md)** for:
 
+- **Open draft PR survey** (canonical reliability draft: PR #1 on `cursor/harden-boundaries-da19`)
 - Subsystem matrix (risks, mitigations, test mapping)
 - Full **test file inventory** (19 Vitest files)
 - Token-lock concurrency notes and **offline troubleshooting**
+- Reliability/docs **change checklist** (extend one draft, offline verify only)
 
 Use it when scoping a reliability or docs-only pass.
 
